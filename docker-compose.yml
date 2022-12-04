@@ -1,0 +1,18 @@
+version: "3.9"
+
+volumes:
+  pgdata:
+
+services:
+  postgres_db:
+    container_name: "swdb_netology"
+    env_file: .env
+    image: postgres:14.6-alpine3.16
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${PORT}:5432"
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
