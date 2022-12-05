@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from more_itertools import chunked
 from dotenv import load_dotenv
+from datetime import datetime
 
 
 # connect
@@ -21,8 +22,8 @@ DSN = f'postgresql+asyncpg://{db_user}:{db_password}@{db_host}:{db_port}/{db_nam
 engine = create_async_engine(DSN)
 Session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-ROOT_URL = 'https://www.swapi.tech/api/people/'
-CHUNK_SIZE = 4
+ROOT_URL = 'https://swapi.dev/api/people/'
+CHUNK_SIZE = 10
 
 
 # models
@@ -33,7 +34,6 @@ class PersonModel(Base):
     __tablename__ = "person"
 
     id = Column(Integer, primary_key=True)
-    id_swapi = Column(Integer, nullable=False, unique=True)
     name = Column(String)
     gender = Column(String)
     hair_color = Column(String)
@@ -43,21 +43,26 @@ class PersonModel(Base):
     homeworld = Column(String)
     height = Column(String)
     mass = Column(String)
-    # films = Column(Text)
-    # species = Column(Text)
-    # starships = Column(Text)
-    # venicles = Column(Text)
+    films = Column(Text)
+    species = Column(Text)
+    starships = Column(Text)
+    vehicles = Column(Text)
 
 
 # functions
 async def chunked_async(async_iter, size):
     results = []
+    count = 0
     while True:
         try:
             item = await async_iter.__anext__()
         except StopAsyncIteration:
             break
+        if item.get('status'):
+            count += 1
         results.append(item)
+        if count == size:
+            break
         if len(results) == size:
             yield results
             results = []
@@ -65,33 +70,34 @@ async def chunked_async(async_iter, size):
 
 async def get_person(person_id: int, session: ClientSession):
     async with session.get(f'{ROOT_URL}{person_id}') as response:
+        if response.status == 404:
+            return {'status': 404}
         json_data = await response.json()
-    return json_data
+        return json_data
 
 
 async def insert_person(person_chunk):
     async with Session() as session:
         for person in person_chunk:
-            if person['message'] == 'not found':
-                print('записи не существует')
+            if person.get('status') == 404:
                 break
-            id_swapi = int(person['result']['uid'])
-            data = person['result']['properties']
             new_person = PersonModel(
-                id_swapi=id_swapi,
-                name=data['name'],
-                gender=data['gender'],
-                hair_color=data['hair_color'],
-                eye_color=data['eye_color'],
-                skin_color=data['skin_color'],
-                birth_year=data['birth_year'],
-                homeworld=data['homeworld'],
-                height=data['height'],
-                mass=data['mass']
+                name=person['name'],
+                gender=person['gender'],
+                hair_color=person['hair_color'],
+                eye_color=person['eye_color'],
+                skin_color=person['skin_color'],
+                birth_year=person['birth_year'],
+                homeworld=person['homeworld'],
+                height=person['height'],
+                mass=person['mass'],
+                films=','.join(person['films']),
+                species=','.join(person['species']),
+                starships=','.join(person['starships']),
+                vehicles=','.join(person['vehicles'])
             )
             session.add(new_person)
             await session.commit()
-            print(f'>> {id_swapi} запись добавлена')
 
 
 async def get_people(number: int):
@@ -116,6 +122,8 @@ async def main(number):
 
 if __name__ == "__main__":
 
+    start = datetime.now()
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(main(100))
+    asyncio.run(main(120))
+    print(datetime.now() - start)
     print('done!')
